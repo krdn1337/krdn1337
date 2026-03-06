@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KRDN1337 — Reverse Engineering & C++</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --g:#00ff88;--g2:#00cc66;--glow:rgba(0,255,136,.28);
+  --c:#00f0ff;--r:#ff2d55;--y:#fbbf00;--p:#a855f7;
+  --bg:#020608;--card:rgba(4,14,10,.75);
+  --b:rgba(0,255,136,.07);--bh:rgba(0,255,136,.28);
+  --t:#f0fff5;--td:rgba(200,255,220,.38);--tm:rgba(200,255,220,.65)
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--t);font-family:'JetBrains Mono',monospace;overflow-x:hidden;cursor:none}
+
+/* ─── CUSTOM MAGNETIC CURSOR ─── */
+#cur{
+  width:10px;height:10px;border-radius:50%;background:var(--g);
+  position:fixed;top:0;left:0;z-index:99999;pointer-events:none;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 15px var(--g),0 0 30px rgba(0,255,136,.4),0 0 60px rgba(0,255,136,.15);
+  transition:width .2s,height .2s,background .2s
+}
+#cur-ring{
+  width:36px;height:36px;border-radius:50%;
+  border:1px solid rgba(0,255,136,.5);
+  position:fixed;top:0;left:0;z-index:99998;pointer-events:none;
+  transform:translate(-50%,-50%);transition:all .25s ease
+}
+#cur-trail{position:fixed;inset:0;pointer-events:none;z-index:99997}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar{width:2px}
+::-webkit-scrollbar-thumb{background:linear-gradient(var(--g),var(--c));border-radius:2px}
+
+/* ─── CANVAS LAYERS ─── */
+#bg-plasma{position:fixed;inset:0;z-index:0;opacity:.18}
+#bg-grid{position:fixed;inset:0;z-index:1;opacity:1}
+#particle-canvas{position:fixed;inset:0;z-index:2;pointer-events:none}
+
+/* ─── SCANLINES ─── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:3;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.018) 2px,rgba(0,0,0,.018) 4px)
+}
+
+/* ─── NOISE ─── */
+body::after{
+  content:'';position:fixed;inset:0;z-index:3;pointer-events:none;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")
+}
+
+.wrap{position:relative;z-index:10}
+
+/* ─── NAV ─── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:1000;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 4rem;height:64px;
+  background:rgba(2,6,8,0);
+  backdrop-filter:blur(0px);
+  border-bottom:1px solid transparent;
+  transition:all .5s ease
+}
+nav.solid{
+  background:rgba(2,6,8,.92);
+  backdrop-filter:blur(24px);
+  border-bottom-color:rgba(0,255,136,.07)
+}
+.nav-logo{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;
+  letter-spacing:5px;color:var(--g);text-decoration:none;
+  position:relative
+}
+.nav-logo::after{
+  content:'';position:absolute;bottom:-4px;left:0;right:0;height:1px;
+  background:linear-gradient(to right,var(--g),transparent);
+  transform:scaleX(0);transform-origin:left;transition:transform .4s
+}
+.nav-logo:hover::after{transform:scaleX(1)}
+nav ul{list-style:none;display:flex;gap:0}
+nav ul li a{
+  display:block;padding:0 1.1rem;height:64px;line-height:64px;
+  color:var(--td);text-decoration:none;font-size:.67rem;letter-spacing:2.5px;text-transform:uppercase;
+  transition:color .25s;position:relative
+}
+nav ul li a::after{
+  content:'';position:absolute;bottom:0;left:1.1rem;right:1.1rem;
+  height:1px;background:var(--g);box-shadow:0 0 8px var(--g);
+  transform:scaleX(0);transition:transform .3s
+}
+nav ul li a:hover{color:var(--g)}
+nav ul li a:hover::after{transform:scaleX(1)}
+.nav-cta{
+  display:flex;align-items:center;gap:.5rem;cursor:none;
+  padding:.5rem 1.2rem;border:1px solid var(--bh);
+  color:var(--g);font-size:.66rem;letter-spacing:2px;text-transform:uppercase;
+  text-decoration:none;transition:all .3s;position:relative;overflow:hidden
+}
+.nav-cta::before{
+  content:'';position:absolute;inset:0;background:var(--g);
+  transform:translateX(-100%);transition:transform .35s;z-index:-1
+}
+.nav-cta:hover{color:#020608}
+.nav-cta:hover::before{transform:translateX(0)}
+
+/* ─── HERO ─── */
+.hero{
+  position:relative;min-height:100vh;
+  display:flex;align-items:center;
+  padding:0 4rem;overflow:hidden
+}
+#hero-canvas{position:absolute;inset:0;z-index:0}
+.hero-vignette{
+  position:absolute;inset:0;z-index:1;
+  background:
+    radial-gradient(ellipse 60% 80% at 50% 50%,transparent 20%,rgba(2,6,8,.7) 70%,rgba(2,6,8,.97) 100%),
+    linear-gradient(to right,rgba(2,6,8,.8) 0%,transparent 40%,transparent 60%,rgba(2,6,8,.8) 100%)
+}
+.hero-content{position:relative;z-index:5;max-width:740px}
+
+/* LOADING REVEAL SEQUENCE */
+.hero-content > *{opacity:0;transform:translateY(30px)}
+.hero-content.loaded .tag-line{animation:heroIn .8s .1s ease forwards}
+.hero-content.loaded .hero-h{animation:heroIn .8s .3s ease forwards}
+.hero-content.loaded .hero-sub{animation:heroIn .8s .6s ease forwards}
+.hero-content.loaded .hero-actions{animation:heroIn .8s .85s ease forwards}
+@keyframes heroIn{to{opacity:1;transform:none}}
+
+.tag-line{
+  display:inline-flex;align-items:center;gap:.8rem;
+  padding:.4rem 1.1rem;margin-bottom:2.5rem;
+  border:1px solid rgba(0,255,136,.2);background:rgba(0,255,136,.04);
+  font-size:.62rem;letter-spacing:3px;color:var(--g);text-transform:uppercase
+}
+.tag-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--g);
+  box-shadow:0 0 10px var(--g),0 0 20px rgba(0,255,136,.5);
+  animation:pd 2s infinite
+}
+@keyframes pd{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.5)}}
+
+.hero-h{
+  font-family:'Syne',sans-serif;font-weight:800;
+  line-height:.95;margin-bottom:2rem;letter-spacing:-3px
+}
+.hero-h .small{
+  font-size:clamp(.9rem,1.8vw,1.3rem);letter-spacing:6px;
+  color:var(--td);display:block;margin-bottom:.5rem;
+  font-weight:400;font-family:'JetBrains Mono',monospace
+}
+.hero-h .big{font-size:clamp(4rem,9vw,8.5rem);display:block;position:relative}
+.hero-h .big .part1{color:var(--t)}
+.hero-h .big .part2{
+  color:var(--g);
+  text-shadow:0 0 40px var(--glow),0 0 100px rgba(0,255,136,.12);
+  position:relative
+}
+/* chromatic aberration on big text */
+.hero-h .big .part2::before{
+  content:attr(data-t);position:absolute;top:0;left:0;
+  color:var(--c);opacity:0;
+  animation:chrom 6s infinite
+}
+.hero-h .big .part2::after{
+  content:attr(data-t);position:absolute;top:0;left:0;
+  color:var(--r);opacity:0;
+  animation:chrom 6s 3s infinite
+}
+@keyframes chrom{
+  0%,92%,100%{opacity:0;transform:none}
+  94%{opacity:.7;transform:translate(-4px,0)}
+  96%{opacity:.7;transform:translate(4px,0)}
+  98%{opacity:.7;transform:translate(-2px,0)}
+}
+
+.hero-sub{
+  font-size:.9rem;color:var(--td);line-height:2;
+  max-width:520px;margin-bottom:3rem;
+  border-left:2px solid var(--g);padding-left:1.2rem
+}
+.hero-sub strong{color:var(--g);font-weight:500}
+
+.hero-actions{display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap}
+.btn-primary{
+  display:inline-flex;align-items:center;gap:.7rem;
+  padding:1rem 2.5rem;background:var(--g);color:#020608;
+  font-family:'Syne',sans-serif;font-size:.78rem;font-weight:800;
+  letter-spacing:2px;text-transform:uppercase;
+  text-decoration:none;border:none;cursor:none;
+  transition:all .3s;position:relative;overflow:hidden
+}
+.btn-primary::before{
+  content:'';position:absolute;top:50%;left:50%;
+  width:0;height:0;background:rgba(255,255,255,.3);
+  border-radius:50%;transform:translate(-50%,-50%);
+  transition:width .6s,height .6s
+}
+.btn-primary:hover{box-shadow:0 0 50px var(--glow),0 0 100px rgba(0,255,136,.08)}
+.btn-primary:hover::before{width:400px;height:400px}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:.6rem;
+  padding:1rem 2rem;color:var(--tm);
+  font-size:.76rem;letter-spacing:2px;text-transform:uppercase;
+  text-decoration:none;border:1px solid rgba(0,255,136,.18);
+  cursor:none;transition:all .3s
+}
+.btn-ghost:hover{border-color:var(--g);color:var(--g);background:rgba(0,255,136,.04)}
+
+/* HERO DECORATION */
+.hero-deco{
+  position:absolute;right:4rem;top:50%;transform:translateY(-50%);
+  z-index:5;width:380px;height:380px;pointer-events:none
+}
+.deco-ring{
+  position:absolute;top:50%;left:50%;
+  border:1px solid rgba(0,255,136,.15);border-radius:50%;
+  transform:translate(-50%,-50%)
+}
+.deco-ring:nth-child(1){width:380px;height:380px;animation:spin 30s linear infinite}
+.deco-ring:nth-child(2){width:280px;height:280px;border-color:rgba(0,240,255,.1);animation:spin 20s linear infinite reverse}
+.deco-ring:nth-child(3){width:180px;height:180px;border-color:rgba(168,85,247,.1);animation:spin 15s linear infinite}
+.deco-ring:nth-child(4){width:80px;height:80px;animation:spin 10s linear infinite reverse}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.deco-dot{
+  position:absolute;width:6px;height:6px;border-radius:50%;background:var(--g);
+  box-shadow:0 0 10px var(--g);
+  top:50%;left:50%;transform-origin:0 0
+}
+.deco-center{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:60px;height:60px;
+  background:radial-gradient(circle,rgba(0,255,136,.15) 0%,transparent 70%);
+  border:1px solid rgba(0,255,136,.3);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Syne',sans-serif;font-size:.6rem;color:var(--g);letter-spacing:2px;
+  animation:breathe 4s ease-in-out infinite
+}
+@keyframes breathe{0%,100%{box-shadow:0 0 20px rgba(0,255,136,.1)}50%{box-shadow:0 0 40px rgba(0,255,136,.3),0 0 80px rgba(0,255,136,.1)}}
+
+/* SCROLL INDICATOR */
+.scroll-cta{
+  position:absolute;bottom:3rem;left:4rem;z-index:5;
+  display:flex;align-items:center;gap:1rem;
+  font-size:.6rem;letter-spacing:3px;color:var(--td);text-transform:uppercase;
+  opacity:0;animation:heroIn .8s 1.2s ease forwards
+}
+.scroll-line-anim{width:60px;height:1px;background:linear-gradient(to right,var(--g),transparent);position:relative;overflow:hidden}
+.scroll-line-anim::after{
+  content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+  background:var(--g);animation:slide 2s ease-in-out infinite
+}
+@keyframes slide{0%{left:-100%}100%{left:200%}}
+
+/* ─── MARQUEE ─── */
+.marquee{
+  border-top:1px solid rgba(0,255,136,.05);
+  border-bottom:1px solid rgba(0,255,136,.05);
+  padding:.75rem 0;overflow:hidden;
+  background:linear-gradient(to right,rgba(0,255,136,.02),transparent,rgba(0,255,136,.02))
+}
+.mq-track{display:flex;animation:mq 30s linear infinite;width:max-content}
+@keyframes mq{to{transform:translateX(-50%)}}
+.mq-item{
+  padding:0 2rem;font-size:.6rem;letter-spacing:3px;color:var(--td);
+  text-transform:uppercase;display:inline-flex;align-items:center;gap:1rem;white-space:nowrap
+}
+.mq-sep{color:var(--g);opacity:.4;font-size:.8rem}
+
+/* ─── SECTION ─── */
+.section{max-width:1300px;margin:0 auto;padding:8rem 4rem}
+.sec-head{display:flex;align-items:center;gap:1.5rem;margin-bottom:5rem}
+.sec-num{font-size:.58rem;color:var(--g);letter-spacing:4px;opacity:.5;font-family:'JetBrains Mono',monospace}
+.sec-title{font-family:'Syne',sans-serif;font-size:clamp(1.8rem,3.5vw,2.5rem);font-weight:800;color:var(--t);letter-spacing:-1.5px}
+.sec-title em{color:var(--g);font-style:normal;position:relative}
+.sec-title em::after{
+  content:'';position:absolute;bottom:2px;left:0;right:0;height:2px;
+  background:linear-gradient(to right,var(--g),transparent);
+  transform-origin:left;animation:underIn .8s ease forwards;transform:scaleX(0)
+}
+.rv.on .sec-title em::after{animation:underIn .8s .3s ease forwards}
+@keyframes underIn{to{transform:scaleX(1)}}
+.sec-line{flex:1;height:1px;background:linear-gradient(to right,var(--bh),transparent)}
+.full-div{height:1px;background:linear-gradient(to right,transparent,var(--bh),transparent)}
+
+/* ─── ABOUT ─── */
+.about-grid{display:grid;grid-template-columns:3fr 2fr;gap:5rem;align-items:start}
+.ap{font-size:.9rem;color:var(--tm);line-height:2;margin-bottom:1.4rem}
+.ap strong{color:var(--g);font-weight:500}
+.ap em{color:var(--t);font-style:normal;font-family:'Syne',sans-serif;font-weight:700}
+.blockquote{
+  margin:2.5rem 0;padding:1.5rem 2rem;
+  border-left:2px solid var(--g);
+  background:linear-gradient(to right,rgba(0,255,136,.04),transparent);
+  font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;
+  color:var(--t);line-height:1.6;letter-spacing:-.3px;position:relative
+}
+.blockquote::before{
+  content:'"';position:absolute;top:-.5rem;left:1.5rem;
+  font-size:4rem;color:rgba(0,255,136,.12);font-family:serif;line-height:1
+}
+.sk-head{font-size:.58rem;letter-spacing:3px;text-transform:uppercase;color:var(--td);margin:2.5rem 0 1.5rem;display:flex;align-items:center;gap:1rem}
+.sk-head::after{content:'';flex:1;height:1px;background:var(--b)}
+.sk{margin-bottom:1.4rem}
+.sk-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.sk-name{font-size:.73rem;color:var(--tm)}
+.sk-pct{font-family:'Syne',sans-serif;font-size:.68rem;font-weight:800;color:var(--g)}
+.sk-track{height:2px;background:rgba(0,255,136,.06);position:relative;overflow:visible}
+.sk-fill{
+  position:absolute;top:0;left:0;height:100%;
+  background:linear-gradient(to right,var(--g2),var(--g));
+  box-shadow:0 0 10px var(--glow);width:0;
+  transition:width 2s cubic-bezier(.4,0,.2,1)
+}
+.sk-fill::after{
+  content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);
+  width:6px;height:6px;border-radius:50%;background:var(--g);
+  box-shadow:0 0 8px var(--g)
+}
+
+.profile-card{
+  background:var(--card);border:1px solid var(--b);
+  backdrop-filter:blur(20px);position:sticky;top:80px;overflow:hidden
+}
+.pc-banner{
+  height:100px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--bg) 0%,rgba(0,255,136,.06) 50%,var(--bg) 100%)
+}
+#banner-canvas{position:absolute;inset:0;width:100%;height:100%}
+.pc-body{padding:1rem 1.4rem 1.5rem}
+.pc-av{
+  width:56px;height:56px;
+  background:linear-gradient(135deg,var(--g2),var(--c));
+  border:2px solid var(--g);box-shadow:0 0 25px var(--glow);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:#020608;
+  margin-top:-32px;margin-bottom:.8rem;position:relative;z-index:2
+}
+.pc-name{font-family:'Syne',sans-serif;font-size:1rem;font-weight:800;color:var(--t);letter-spacing:2px;margin-bottom:.15rem}
+.pc-role{font-size:.63rem;color:var(--g);letter-spacing:1.5px;margin-bottom:1rem}
+.pc-tags{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:1rem}
+.pc-tag{padding:2px 7px;background:rgba(0,255,136,.05);border:1px solid var(--bh);font-size:.58rem;color:var(--g);letter-spacing:1px}
+.pc-stats{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.pc-stat{background:rgba(0,0,0,.3);padding:.75rem;border:1px solid var(--b)}
+.pc-sn{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--g);text-shadow:0 0 15px var(--glow);display:block}
+.pc-sl{font-size:.52rem;color:var(--td);letter-spacing:2px;text-transform:uppercase;margin-top:.1rem}
+.pc-info{margin-top:.8rem;border-top:1px solid var(--b);padding-top:.8rem}
+.pc-row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid rgba(0,255,136,.03);font-size:.65rem}
+.pc-row:last-child{border:none}
+.pc-lbl{color:var(--td)} .pc-val{color:var(--g)}
+
+/* ─── TUTORIALS ─── */
+.tut-bento{display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:auto;gap:1.2rem}
+.tc{
+  background:var(--card);border:1px solid var(--b);
+  padding:1.8rem;cursor:none;transition:all .45s cubic-bezier(.4,0,.2,1);
+  position:relative;overflow:hidden;backdrop-filter:blur(12px)
+}
+.tc::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(0,255,136,.06) 0%,transparent 60%);
+  opacity:0;transition:opacity .4s
+}
+.tc::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(to right,var(--g),var(--c),var(--p));
+  transform:scaleX(0);transform-origin:left;transition:transform .5s
+}
+.tc:hover{border-color:var(--bh);transform:translateY(-6px);box-shadow:0 30px 70px rgba(0,0,0,.5),0 0 40px rgba(0,255,136,.04)}
+.tc:hover::before{opacity:1}
+.tc:hover::after{transform:scaleX(1)}
+.tc-1{grid-column:span 3;grid-row:span 2}
+.tc-2{grid-column:span 2}
+.tc-3{grid-column:span 1}
+.tc-4{grid-column:span 2}
+.tc-5{grid-column:span 2}
+.tc-6{grid-column:span 2}
+.badge{
+  display:inline-flex;align-items:center;gap:.35rem;
+  padding:3px 9px;font-size:.57rem;letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:1rem;border-radius:2px
+}
+.bc{background:rgba(0,240,255,.07);color:var(--c);border:1px solid rgba(0,240,255,.2)}
+.br{background:rgba(255,45,85,.07);color:var(--r);border:1px solid rgba(255,45,85,.2)}
+.bt{background:rgba(251,191,0,.07);color:var(--y);border:1px solid rgba(251,191,0,.2)}
+.bg{background:rgba(0,255,136,.07);color:var(--g);border:1px solid rgba(0,255,136,.2)}
+.bp{background:rgba(168,85,247,.07);color:var(--p);border:1px solid rgba(168,85,247,.2)}
+.tc-title{font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700;color:var(--t);margin-bottom:.6rem;line-height:1.3;letter-spacing:-.2px}
+.tc-1 .tc-title{font-size:1.2rem}
+.tc-desc{font-size:.73rem;color:var(--td);line-height:1.8;margin-bottom:1.4rem}
+.tc-foot{display:flex;justify-content:space-between;align-items:center;padding-top:1rem;border-top:1px solid var(--b);font-size:.62rem;color:var(--td)}
+.tc-arr{color:var(--g);opacity:0;transform:translateX(-6px);transition:all .3s}
+.tc:hover .tc-arr{opacity:1;transform:none}
+
+/* ─── TOOLS ─── */
+.tools-wrap{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;background:rgba(0,255,136,.05);
+  border:1px solid var(--b)
+}
+.tool-item{
+  background:var(--bg);padding:2rem 1.5rem;
+  cursor:none;transition:all .35s;text-align:center;
+  position:relative;overflow:hidden
+}
+.tool-item::after{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,rgba(0,255,136,.07) 0%,transparent 70%);
+  opacity:0;transition:opacity .4s
+}
+.tool-item:hover{background:rgba(4,14,10,.98)}
+.tool-item:hover::after{opacity:1}
+.tool-icon-box{
+  width:52px;height:52px;margin:0 auto 1.1rem;
+  border:1px solid var(--bh);display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;transition:all .4s;background:rgba(0,0,0,.3);
+  position:relative
+}
+.tool-icon-box::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,transparent,rgba(0,255,136,.06));
+  opacity:0;transition:opacity .4s
+}
+.tool-item:hover .tool-icon-box{border-color:var(--g);box-shadow:0 0 25px var(--glow),0 0 50px rgba(0,255,136,.06)}
+.tool-item:hover .tool-icon-box::before{opacity:1}
+.tool-name{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:700;color:var(--t);margin-bottom:.35rem;letter-spacing:.5px}
+.tool-desc{font-size:.67rem;color:var(--td);line-height:1.6;margin-bottom:.7rem}
+.tool-free{padding:2px 6px;background:rgba(0,255,136,.06);border:1px solid var(--b);font-size:.54rem;color:var(--g);letter-spacing:2px;display:inline-block}
+
+/* ─── PROJECTS ─── */
+.proj-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.2rem}
+.pj{
+  background:var(--card);border:1px solid var(--b);
+  padding:2rem;cursor:none;transition:all .4s;
+  position:relative;overflow:hidden;backdrop-filter:blur(12px)
+}
+.pj::before{
+  content:'';position:absolute;top:0;left:0;
+  width:2px;height:0;
+  background:linear-gradient(to bottom,var(--g),var(--c));
+  transition:height .5s
+}
+.pj:hover{border-color:var(--bh);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.pj:hover::before{height:100%}
+.pj-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.1rem}
+.pj-ico{
+  width:40px;height:40px;background:rgba(0,255,136,.06);
+  border:1px solid var(--bh);display:flex;align-items:center;justify-content:center;font-size:1.1rem
+}
+.pst{font-size:.58rem;letter-spacing:2px;padding:3px 8px}
+.pst-a{background:rgba(0,255,136,.07);color:var(--g);border:1px solid rgba(0,255,136,.2)}
+.pst-w{background:rgba(251,191,0,.06);color:var(--y);border:1px solid rgba(251,191,0,.2)}
+.pst-p{background:rgba(0,240,255,.06);color:var(--c);border:1px solid rgba(0,240,255,.2)}
+.pj-title{font-family:'Syne',sans-serif;font-size:.98rem;font-weight:700;color:var(--t);margin-bottom:.5rem;letter-spacing:-.2px}
+.pj-desc{font-size:.74rem;color:var(--td);line-height:1.8;margin-bottom:1.1rem}
+.pj-tags{display:flex;flex-wrap:wrap;gap:.3rem}
+.pj-tag{padding:2px 6px;border:1px solid var(--b);font-size:.58rem;color:var(--td);letter-spacing:1px}
+
+/* ─── BLOG ─── */
+.blog-list{display:flex;flex-direction:column;gap:0}
+.bi{
+  display:grid;grid-template-columns:120px 1fr auto;gap:2rem;align-items:center;
+  padding:1.4rem 2rem;border:1px solid var(--b);border-bottom:none;
+  background:var(--card);cursor:none;backdrop-filter:blur(10px);
+  transition:all .3s;position:relative;overflow:hidden
+}
+.bi::before{
+  content:'';position:absolute;top:0;left:0;bottom:0;
+  width:0;background:linear-gradient(to right,rgba(0,255,136,.04),transparent);
+  transition:width .4s
+}
+.bi:first-child{border-radius:4px 4px 0 0}
+.bi:last-child{border-bottom:1px solid var(--b);border-radius:0 0 4px 4px}
+.bi:hover{border-color:var(--bh);padding-left:2.8rem}
+.bi:hover::before{width:100%}
+.bi-date{font-size:.63rem;color:var(--td);letter-spacing:.5px}
+.bi-title{font-family:'Syne',sans-serif;font-size:.88rem;font-weight:600;color:var(--t);transition:color .25s;letter-spacing:-.2px}
+.bi:hover .bi-title{color:var(--g)}
+.bi-tag{font-size:.57px;padding:2px 8px;letter-spacing:1.5px;white-space:nowrap}
+
+/* ─── CHAT ─── */
+.chat-section{max-width:1300px;margin:0 auto;padding:8rem 4rem}
+.chat-layout{display:grid;grid-template-columns:1fr 300px;gap:1.2rem;height:620px}
+.chat-main{
+  background:var(--card);border:1px solid var(--b);
+  display:flex;flex-direction:column;overflow:hidden;backdrop-filter:blur(20px);
+  position:relative
+}
+.chat-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 1.6rem;background:rgba(0,0,0,.35);border-bottom:1px solid var(--b)
+}
+.ctb-info .ctb-title{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:700;color:var(--t);letter-spacing:.5px}
+.ctb-info .ctb-sub{font-size:.6rem;color:var(--td);margin-top:1px}
+.online-badge{display:flex;align-items:center;gap:.5rem;font-size:.63rem;color:var(--g)}
+.pulsedot{
+  width:6px;height:6px;border-radius:50%;background:var(--g);
+  box-shadow:0 0 6px var(--g);animation:pd 2s infinite
+}
+.chat-msgs{flex:1;overflow-y:auto;padding:1.2rem 1.6rem;display:flex;flex-direction:column;gap:.85rem;scroll-behavior:smooth}
+.chat-msgs::-webkit-scrollbar{width:2px}
+.chat-msgs::-webkit-scrollbar-thumb{background:var(--bh)}
+.cm{display:flex;flex-direction:column;gap:.22rem;animation:cmIn .35s cubic-bezier(.4,0,.2,1)}
+@keyframes cmIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.cm-head{display:flex;align-items:center;gap:.5rem;font-size:.58rem}
+.cm-name{font-family:'Syne',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:1px}
+.cm-time{color:var(--td)}
+.cm-tag{padding:1px 5px;background:rgba(0,255,136,.06);border:1px solid var(--bh);font-size:.5rem;color:var(--g);letter-spacing:1px}
+.cm-body{
+  background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.04);
+  border-radius:0 8px 8px 8px;padding:.7rem 1rem;
+  font-size:.76rem;color:var(--tm);line-height:1.65;max-width:82%;word-break:break-word
+}
+.cm.own{align-items:flex-end}
+.cm.own .cm-body{border-radius:8px 0 8px 8px;background:rgba(0,255,136,.05);border-color:rgba(0,255,136,.1)}
+.cm.own .cm-name{color:var(--g)}
+.cm-sys{text-align:center;font-size:.58rem;color:var(--td);padding:.25rem;letter-spacing:2px}
+.chat-input-area{padding:.9rem 1.6rem;border-top:1px solid var(--b);background:rgba(0,0,0,.2)}
+.anon-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem;font-size:.58rem;color:var(--td)}
+.input-row{display:flex;gap:.5rem}
+.msg-input{
+  flex:1;background:rgba(0,0,0,.4);border:1px solid var(--b);
+  color:var(--t);font-family:'JetBrains Mono',monospace;font-size:.76rem;
+  padding:.7rem 1rem;outline:none;transition:all .3s
+}
+.msg-input:focus{border-color:var(--g);box-shadow:0 0 20px rgba(0,255,136,.07)}
+.msg-input::placeholder{color:var(--td)}
+.send-btn{
+  padding:.7rem 1.2rem;background:var(--g);border:none;color:#020608;
+  font-family:'Syne',sans-serif;font-size:.7rem;font-weight:800;
+  letter-spacing:1.5px;cursor:none;transition:all .3s;white-space:nowrap
+}
+.send-btn:hover{box-shadow:0 0 25px var(--glow)}
+.chat-sidebar{display:flex;flex-direction:column;gap:1rem;overflow-y:auto}
+.chat-sidebar::-webkit-scrollbar{width:2px}
+.scard{background:var(--card);border:1px solid var(--b);padding:1.2rem;backdrop-filter:blur(10px)}
+.scard-title{font-size:.57rem;color:var(--td);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem}
+.scard-title::after{content:'';flex:1;height:1px;background:var(--b)}
+.rule-row{display:flex;gap:.5rem;font-size:.67rem;color:var(--td);line-height:1.5;margin-bottom:.45rem}
+.rn{color:var(--g);font-family:'Syne',sans-serif;font-weight:700;min-width:16px}
+.topics{display:flex;flex-wrap:wrap;gap:.3rem}
+.topic-chip{
+  padding:3px 7px;background:rgba(0,255,136,.05);border:1px solid var(--bh);
+  font-size:.58rem;color:var(--g);letter-spacing:1px;cursor:none;transition:all .2s
+}
+.topic-chip:hover{background:rgba(0,255,136,.15)}
+.note-box{font-size:.6rem;color:var(--td);line-height:1.6;padding:.75rem;background:rgba(251,191,0,.03);border:1px solid rgba(251,191,0,.1)}
+.note-box strong{color:var(--y)}
+
+/* ─── FOOTER ─── */
+footer{
+  position:relative;z-index:10;
+  border-top:1px solid var(--b);padding:4rem;
+  max-width:1300px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:end
+}
+.f-brand .f-logo{
+  font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;
+  color:var(--g);letter-spacing:5px;
+  text-shadow:0 0 25px var(--glow);margin-bottom:.35rem
+}
+.f-brand .f-tagline{font-size:.67rem;color:var(--td);letter-spacing:1px}
+.f-right-col{display:flex;flex-direction:column;align-items:flex-end;gap:1.2rem}
+.f-links{display:flex;gap:2rem}
+.f-links a{font-size:.65rem;color:var(--td);text-decoration:none;letter-spacing:2px;text-transform:uppercase;transition:color .2s}
+.f-links a:hover{color:var(--g)}
+.f-bottom{
+  grid-column:1/-1;padding-top:1.5rem;
+  border-top:1px solid var(--b);
+  display:flex;justify-content:space-between;
+  font-size:.58rem;color:var(--td);letter-spacing:1px
+}
+.f-bottom span{color:var(--g)}
+
+/* ─── REVEAL ANIMATIONS ─── */
+.rv{opacity:0;transform:translateY(28px);transition:opacity .75s ease,transform .75s ease}
+.rv.on{opacity:1;transform:none}
+.rv-l{opacity:0;transform:translateX(-28px);transition:opacity .75s ease,transform .75s ease}
+.rv-l.on{opacity:1;transform:none}
+.rv-r{opacity:0;transform:translateX(28px);transition:opacity .75s ease,transform .75s ease}
+.rv-r.on{opacity:1;transform:none}
+.rv-s{opacity:0;transform:scale(.95);transition:opacity .75s ease,transform .75s ease}
+.rv-s.on{opacity:1;transform:none}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:1100px){
+  .tut-bento{grid-template-columns:1fr 1fr;}.tc-1,.tc-2,.tc-3,.tc-4,.tc-5,.tc-6{grid-column:span 1}
+  .tools-wrap{grid-template-columns:repeat(2,1fr)}
+  .about-grid{grid-template-columns:1fr}
+  .chat-layout{grid-template-columns:1fr;height:auto}
+  .chat-sidebar{display:none}
+  .hero-deco{display:none}
+}
+@media(max-width:768px){
+  nav{padding:0 1.5rem}
+  nav ul{display:none}
+  .hero,.section,.chat-section{padding-left:1.5rem;padding-right:1.5rem}
+  .proj-grid{grid-template-columns:1fr}
+  .hero-h .big{font-size:3.5rem}
+  .bi{grid-template-columns:1fr;gap:.25rem}
+  footer{grid-template-columns:1fr}
+  .f-right-col{align-items:flex-start}
+  .chat-main{height:480px}
+}
+
+/* ─── ADMIN PANEL ─── */
+#admin-overlay{
+  display:none;position:fixed;inset:0;z-index:99999;
+  background:rgba(2,6,8,.96);backdrop-filter:blur(20px);
+  align-items:center;justify-content:center
+}
+#admin-overlay.open{display:flex}
+.admin-box{
+  width:min(700px,95vw);max-height:90vh;overflow-y:auto;
+  background:#020e08;border:1px solid rgba(0,255,136,.3);
+  box-shadow:0 0 60px rgba(0,255,136,.1);padding:2.5rem
+}
+.admin-box::-webkit-scrollbar{width:2px}
+.admin-box::-webkit-scrollbar-thumb{background:var(--g)}
+.admin-title{
+  font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;
+  color:var(--g);letter-spacing:3px;margin-bottom:.3rem
+}
+.admin-sub{font-size:.65rem;color:var(--td);letter-spacing:2px;margin-bottom:2rem}
+.admin-section{margin-bottom:2rem}
+.admin-section-title{
+  font-size:.6rem;letter-spacing:3px;color:var(--g);text-transform:uppercase;
+  margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--b)
+}
+.admin-field{margin-bottom:1rem}
+.admin-label{font-size:.62rem;color:var(--td);letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+.admin-input{
+  width:100%;background:rgba(0,0,0,.5);border:1px solid var(--b);
+  color:var(--t);font-family:'JetBrains Mono',monospace;font-size:.76rem;
+  padding:.6rem .9rem;outline:none;transition:border .3s
+}
+.admin-input:focus{border-color:var(--g)}
+.admin-range{display:flex;align-items:center;gap:1rem}
+.admin-range input[type=range]{
+  flex:1;accent-color:var(--g);height:2px;cursor:pointer
+}
+.admin-range-val{
+  font-family:'Syne',sans-serif;font-weight:800;color:var(--g);
+  font-size:.85rem;min-width:40px;text-align:right
+}
+.admin-textarea{
+  width:100%;background:rgba(0,0,0,.5);border:1px solid var(--b);
+  color:var(--t);font-family:'JetBrains Mono',monospace;font-size:.74rem;
+  padding:.6rem .9rem;outline:none;transition:border .3s;
+  min-height:80px;resize:vertical
+}
+.admin-textarea:focus{border-color:var(--g)}
+.admin-btn{
+  padding:.7rem 1.8rem;background:var(--g);border:none;color:#020608;
+  font-family:'Syne',sans-serif;font-size:.72rem;font-weight:800;
+  letter-spacing:2px;cursor:pointer;transition:all .3s;margin-right:.5rem;margin-top:.5rem
+}
+.admin-btn:hover{box-shadow:0 0 25px var(--glow)}
+.admin-btn.ghost{background:transparent;color:var(--g);border:1px solid var(--bh)}
+.admin-btn.ghost:hover{background:rgba(0,255,136,.06)}
+.admin-msg{
+  font-size:.65rem;padding:.5rem .9rem;margin-top:.5rem;
+  background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);
+  color:var(--g);display:none
+}
+.admin-hint{
+  font-size:.58rem;color:var(--td);letter-spacing:1px;
+  margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b);
+  line-height:1.8
+}
+#admin-lock{
+  position:fixed;bottom:1.5rem;right:1.5rem;z-index:1000;
+  width:36px;height:36px;background:rgba(0,255,136,.06);
+  border:1px solid rgba(0,255,136,.12);display:flex;align-items:center;
+  justify-content:center;cursor:pointer;font-size:1rem;
+  transition:all .3s;opacity:.3
+}
+#admin-lock:hover{opacity:1;border-color:var(--bh);box-shadow:0 0 20px var(--glow)}
+
+/* ─── DAILY LOG ─── */
+.log-feed{display:flex;flex-direction:column;gap:.7rem;margin-top:1.5rem}
+.log-entry{
+  padding:1rem 1.4rem;background:var(--card);border:1px solid var(--b);
+  border-left:3px solid var(--g);animation:cmIn .4s ease
+}
+.log-entry-date{font-size:.58rem;color:var(--td);letter-spacing:2px;margin-bottom:.35rem}
+.log-entry-text{font-size:.78rem;color:var(--tm);line-height:1.8}
+.log-entry-tags{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem}
+.log-tag{padding:1px 6px;background:rgba(0,255,136,.05);border:1px solid var(--bh);font-size:.55rem;color:var(--g);letter-spacing:1px}
+.log-empty{font-size:.75rem;color:var(--td);text-align:center;padding:2rem;border:1px dashed var(--b)}
+</style>
+</head>
+<body>
+
+<!-- cursor -->
+<div id="cur"></div>
+<div id="cur-ring"></div>
+<canvas id="cur-trail"></canvas>
+
+<!-- background layers -->
+<canvas id="bg-plasma"></canvas>
+<canvas id="bg-grid"></canvas>
+<canvas id="particle-canvas"></canvas>
+
+<div class="wrap">
+
+<!-- ══════════ NAV ══════════ -->
+<nav id="nav">
+  <a class="nav-logo" href="#home">KRDN1337</a>
+  <ul>
+    <li><a href="#about">About</a></li>
+    <li><a href="#tutorials">Tutorials</a></li>
+    <li><a href="#tools">Toolkit</a></li>
+    <li><a href="#projects">Projects</a></li>
+    <li><a href="#log">Daily Log</a></li>
+    <li><a href="#community">Community</a></li>
+  </ul>
+  <a href="#community" class="nav-cta">⬡ Join Chat</a>
+</nav>
+
+<!-- ══════════ HERO ══════════ -->
+<section class="hero" id="home">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-vignette"></div>
+
+  <div class="hero-content" id="hero-content">
+    <div class="tag-line"><div class="tag-dot"></div>Reverse Engineering & C++ — Learning in Public</div>
+
+    <h1 class="hero-h">
+      <span class="small">// welcome to</span>
+      <span class="big">
+        <span class="part1">KRD</span><span class="part2" data-t="N1337">N<span style="color:var(--g);text-shadow:0 0 40px var(--glow),0 0 80px rgba(0,255,136,.15)">1337</span></span>
+      </span>
+    </h1>
+
+    <p class="hero-sub">
+      Breaking binaries. Writing low-level code.<br>
+      Teaching <strong>everything</strong> I learn — from zero to reverse engineer.<br>
+      No gatekeeping. No paywalls. <strong>Just raw knowledge.</strong>
+    </p>
+
+    <div class="hero-actions">
+      <a href="#tutorials" class="btn-primary">→ Start Learning</a>
+      <a href="#about" class="btn-ghost">↓ Learn More</a>
+    </div>
+  </div>
+
+  <!-- decorative spinning rings -->
+  <div class="hero-deco" id="hero-deco">
+    <div class="deco-ring"></div>
+    <div class="deco-ring"></div>
+    <div class="deco-ring"></div>
+    <div class="deco-ring"></div>
+    <div class="deco-center">RE</div>
+  </div>
+
+  <div class="scroll-cta">
+    <div class="scroll-line-anim"></div>
+    <span>Scroll to explore</span>
+  </div>
+</section>
+
+<!-- ══════════ MARQUEE ══════════ -->
+<div class="marquee">
+  <div class="mq-track">
+    <span class="mq-item">Reverse Engineering<span class="mq-sep">◆</span></span>
+    <span class="mq-item">C++ Programming<span class="mq-sep">◆</span></span>
+    <span class="mq-item">x86 Assembly<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Ghidra<span class="mq-sep">◆</span></span>
+    <span class="mq-item">x64dbg<span class="mq-sep">◆</span></span>
+    <span class="mq-item">CrackMes<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Binary Analysis<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Learn In Public<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Memory Layout<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Static Analysis<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Reverse Engineering<span class="mq-sep">◆</span></span>
+    <span class="mq-item">C++ Programming<span class="mq-sep">◆</span></span>
+    <span class="mq-item">x86 Assembly<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Ghidra<span class="mq-sep">◆</span></span>
+    <span class="mq-item">x64dbg<span class="mq-sep">◆</span></span>
+    <span class="mq-item">CrackMes<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Binary Analysis<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Learn In Public<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Memory Layout<span class="mq-sep">◆</span></span>
+    <span class="mq-item">Static Analysis<span class="mq-sep">◆</span></span>
+  </div>
+</div>
+
+<!-- ══════════ ABOUT ══════════ -->
+<section class="section" id="about">
+  <div class="sec-head rv"><span class="sec-num">01 /</span><h2 class="sec-title">About <em>Me</em></h2><div class="sec-line"></div></div>
+  <div class="about-grid">
+    <div class="rv-l">
+      <p class="ap">I'm <strong>KRDN1337</strong> — a self-taught hacker and programmer obsessed with how software works at the lowest level. This site documents my journey learning <em>Reverse Engineering</em> and <em>C++</em> from zero, in public, with zero filter.</p>
+      <p class="ap">Every tutorial I publish is something I just figured out. Every mistake is real. You get the actual process of learning — not polished expert content from someone who forgot what it felt like to be lost.</p>
+      <div class="blockquote">"The best way to learn is to teach. I'm learning RE in public so you don't have to start alone."</div>
+      <p class="ap">If you want to understand how software <em>really</em> works — how game protection systems operate, how malware hides, how binaries are structured — this is where to start. <strong>No background required.</strong></p>
+      <div class="sk-head">// Current skill levels — updated as I progress</div>
+      <div class="sk"><div class="sk-row"><span class="sk-name">C++ & Systems Programming</span><span class="sk-pct">35%</span></div><div class="sk-track"><div class="sk-fill" style="--w:35%"></div></div></div>
+      <div class="sk"><div class="sk-row"><span class="sk-name">x86/x64 Assembly Reading</span><span class="sk-pct">22%</span></div><div class="sk-track"><div class="sk-fill" style="--w:22%"></div></div></div>
+      <div class="sk"><div class="sk-row"><span class="sk-name">Static Analysis (Ghidra/IDA)</span><span class="sk-pct">28%</span></div><div class="sk-track"><div class="sk-fill" style="--w:28%"></div></div></div>
+      <div class="sk"><div class="sk-row"><span class="sk-name">Dynamic Analysis (x64dbg)</span><span class="sk-pct">18%</span></div><div class="sk-track"><div class="sk-fill" style="--w:18%"></div></div></div>
+    </div>
+    <div class="rv-r">
+      <div class="profile-card">
+        <div class="pc-banner"><canvas id="banner-canvas"></canvas></div>
+        <div class="pc-body">
+          <div class="pc-av">K</div>
+          <div class="pc-name">KRDN1337</div>
+          <div class="pc-role">// RE Student & Public Educator</div>
+          <div class="pc-tags">
+            <span class="pc-tag">C++</span><span class="pc-tag">Assembly</span>
+            <span class="pc-tag">Ghidra</span><span class="pc-tag">x64dbg</span><span class="pc-tag">CrackMes</span>
+          </div>
+          <div class="pc-stats">
+            <div class="pc-stat"><span class="pc-sn" data-target="17">0</span><div class="pc-sl">CrackMes Solved</div></div>
+            <div class="pc-stat"><span class="pc-sn" data-target="8">0</span><div class="pc-sl">Tutorials</div></div>
+            <div class="pc-stat"><span class="pc-sn" data-target="42">0</span><div class="pc-sl">Days Active</div></div>
+            <div class="pc-stat"><span class="pc-sn" data-target="3">0</span><div class="pc-sl">Projects</div></div>
+          </div>
+          <div class="pc-info">
+            <div class="pc-row"><span class="pc-lbl">Learning Since</span><span class="pc-val">Feb 2026</span></div>
+            <div class="pc-row"><span class="pc-lbl">Tools</span><span class="pc-val">Ghidra, x64dbg</span></div>
+            <div class="pc-row"><span class="pc-lbl">Languages</span><span class="pc-val">C++, ASM, Python</span></div>
+            <div class="pc-row"><span class="pc-lbl">Status</span><span class="pc-val" style="color:var(--g)">● Active</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ TUTORIALS ══════════ -->
+<section class="section" id="tutorials">
+  <div class="sec-head rv"><span class="sec-num">02 /</span><h2 class="sec-title">Tuto<em>rials</em></h2><div class="sec-line"></div></div>
+  <div class="tut-bento">
+    <div class="tc tc-1 rv"><span class="badge br">RE — Featured</span><div class="tc-title">x86 Assembly Crash Course: Registers, Stack & Calling Conventions</div><div class="tc-desc">The single most important tutorial on this site. You cannot do reverse engineering without reading assembly. We go deep — registers, opcodes, stack frames, calling conventions — with visual diagrams for every concept. This is where it all clicks.</div><div class="tc-foot"><span>📖 Intermediate · 35 min read</span><span class="tc-arr">→</span></div></div>
+    <div class="tc tc-2 rv"><span class="badge bc">C++</span><div class="tc-title">Pointers & Memory: What Nobody Explains Clearly</div><div class="tc-desc">Visual guide with memory diagrams. Stack vs heap, pointer arithmetic — and why this is essential for RE.</div><div class="tc-foot"><span>📖 18 min</span><span class="tc-arr">→</span></div></div>
+    <div class="tc tc-3 rv"><span class="badge bt">Tools</span><div class="tc-title">Ghidra From Zero</div><div class="tc-desc">Load, navigate and decompile any binary from scratch.</div><div class="tc-foot"><span>📖 15 min</span><span class="tc-arr">→</span></div></div>
+    <div class="tc tc-4 rv"><span class="badge bc">C++</span><div class="tc-title">Dev Environment: GCC, VS Code & Your First Binary</div><div class="tc-desc">Full toolchain setup. Write, compile, and inspect what the compiler actually produces.</div><div class="tc-foot"><span>📖 10 min</span><span class="tc-arr">→</span></div></div>
+    <div class="tc tc-5 rv"><span class="badge bt">Tools</span><div class="tc-title">x64dbg: Dynamic Analysis & Live Memory</div><div class="tc-desc">Set breakpoints, step through code, modify registers in real-time. Essential workflow.</div><div class="tc-foot"><span>📖 20 min</span><span class="tc-arr">→</span></div></div>
+    <div class="tc tc-6 rv"><span class="badge bg">CrackMe</span><div class="tc-title">Solving My First CrackMe: Full Walkthrough</div><div class="tc-desc">Every dead end documented. Full methodology — not just the answer.</div><div class="tc-foot"><span>📖 30 min</span><span class="tc-arr">→</span></div></div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ TOOLS ══════════ -->
+<section class="section" id="tools">
+  <div class="sec-head rv"><span class="sec-num">03 /</span><h2 class="sec-title">RE <em>Toolkit</em></h2><div class="sec-line"></div></div>
+  <div class="tools-wrap rv-s">
+    <div class="tool-item"><div class="tool-icon-box">🔬</div><div class="tool-name">Ghidra</div><div class="tool-desc">NSA's open-source decompiler and disassembler. The gold standard for static analysis.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">🐛</div><div class="tool-name">x64dbg</div><div class="tool-desc">Open-source debugger for 32/64-bit Windows executables. Essential for dynamic analysis.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">⚡</div><div class="tool-name">IDA Free</div><div class="tool-desc">Industry-standard disassembler. Free version covers most beginner and intermediate needs.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">🧠</div><div class="tool-name">Binary Ninja</div><div class="tool-desc">Modern RE platform with excellent UI and powerful scripting API. Free cloud tier available.</div><span class="tool-free">FREE TIER</span></div>
+    <div class="tool-item"><div class="tool-icon-box">🛡️</div><div class="tool-name">PE-bear</div><div class="tool-desc">PE file format analyzer and editor. Inspect headers, sections, and imports visually.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">🔍</div><div class="tool-name">Detect It Easy</div><div class="tool-desc">Identify file types, packers, compilers, and protections before starting analysis.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">📡</div><div class="tool-name">Wireshark</div><div class="tool-desc">Network protocol analyzer. Capture and inspect traffic for network-aware analysis.</div><span class="tool-free">FREE</span></div>
+    <div class="tool-item"><div class="tool-icon-box">⚙️</div><div class="tool-name">CFF Explorer</div><div class="tool-desc">PE header inspector with integrated hex editor. Lightweight and fast.</div><span class="tool-free">FREE</span></div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ PROJECTS ══════════ -->
+<section class="section" id="projects">
+  <div class="sec-head rv"><span class="sec-num">04 /</span><h2 class="sec-title">Pro<em>jects</em></h2><div class="sec-line"></div></div>
+  <div class="proj-grid">
+    <div class="pj rv"><div class="pj-top"><div class="pj-ico">📓</div><span class="pst pst-a">● ACTIVE</span></div><div class="pj-title">RE Learning Journal</div><div class="pj-desc">Daily notes from zero. Every solved crackme, failed attempt, and breakthrough documented publicly. No editing out the failures.</div><div class="pj-tags"><span class="pj-tag">RE</span><span class="pj-tag">x86 ASM</span><span class="pj-tag">Ghidra</span></div></div>
+    <div class="pj rv"><div class="pj-top"><div class="pj-ico">💾</div><span class="pst pst-w">◐ IN PROGRESS</span></div><div class="pj-title">C++ From Scratch Series</div><div class="pj-desc">Complete series teaching C++ with low-level focus: memory layout, the object model, pointers, and how the compiler translates code to assembly.</div><div class="pj-tags"><span class="pj-tag">C++</span><span class="pj-tag">Memory</span><span class="pj-tag">Compiler Theory</span></div></div>
+    <div class="pj rv"><div class="pj-top"><div class="pj-ico">🗃️</div><span class="pst pst-w">◐ IN PROGRESS</span></div><div class="pj-title">CrackMe Solutions Archive</div><div class="pj-desc">Searchable archive with full methodology — complete thought process, annotated screenshots, and Ghidra markup. Not just answers.</div><div class="pj-tags"><span class="pj-tag">CrackMe</span><span class="pj-tag">x64dbg</span><span class="pj-tag">RE</span></div></div>
+    <div class="pj rv"><div class="pj-top"><div class="pj-ico">🗺️</div><span class="pst pst-p">◇ PLANNED</span></div><div class="pj-title">Interactive RE Beginner Roadmap</div><div class="pj-desc">Visual, interactive learning roadmap for complete beginners. From zero to your first real-world binary — all mapped out with resources.</div><div class="pj-tags"><span class="pj-tag">Roadmap</span><span class="pj-tag">Education</span><span class="pj-tag">Community</span></div></div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ BLOG ══════════ -->
+<section class="section" id="blog">
+  <div class="sec-head rv"><span class="sec-num">05 /</span><h2 class="sec-title">Blog <em>& Notes</em></h2><div class="sec-line"></div></div>
+  <div class="blog-list">
+    <div class="bi rv"><span class="bi-date">2026 · 02 · 22</span><span class="bi-title">Day 1: Why I Chose Reverse Engineering Over Web Dev</span><span class="bi-tag br">RE</span></div>
+    <div class="bi rv"><span class="bi-date">2026 · 02 · 20</span><span class="bi-title">Setting Up My Full RE Lab: Hardware, Software & Why I Chose Each Tool</span><span class="bi-tag bt">Tools</span></div>
+    <div class="bi rv"><span class="bi-date">2026 · 02 · 18</span><span class="bi-title">First Look at x86 Assembly: From Terrified to Obsessed in One Week</span><span class="bi-tag br">RE</span></div>
+    <div class="bi rv"><span class="bi-date">2026 · 02 · 15</span><span class="bi-title">C++ Pointers Finally Click — The Mental Model That Made It Simple</span><span class="bi-tag bc">C++</span></div>
+    <div class="bi rv"><span class="bi-date">2026 · 02 · 12</span><span class="bi-title">My First CrackMe: I Failed 11 Times, Then Everything Made Sense</span><span class="bi-tag bg">CrackMe</span></div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ COMMUNITY CHAT ══════════ -->
+<div class="chat-section" id="community">
+  <div class="sec-head rv"><span class="sec-num">06 /</span><h2 class="sec-title">Anonymous <em>Community</em></h2><div class="sec-line"></div></div>
+  <div class="chat-layout rv">
+    <div class="chat-main">
+      <div class="chat-topbar">
+        <div class="ctb-info">
+          <div class="ctb-title">#general — krdn1337 community</div>
+          <div class="ctb-sub">No account · No login · Fully anonymous</div>
+        </div>
+        <div class="online-badge"><div class="pulsedot"></div><span id="oc">1</span> online</div>
+      </div>
+      <div class="chat-msgs" id="msgs">
+        <div class="cm-sys">— session started · anonymous · no logs · no tracking —</div>
+        <div class="cm">
+          <div class="cm-head"><span class="cm-name" style="color:#00e5ff">ANON_0x4A2F</span><span class="cm-time">just now</span><span class="cm-tag">Student</span></div>
+          <div class="cm-body">Hey! Just found this site. Is Ghidra actually good for beginners or should I start with something simpler?</div>
+        </div>
+        <div class="cm">
+          <div class="cm-head"><span class="cm-name" style="color:#fbbf00">ANON_0x9C11</span><span class="cm-time">just now</span></div>
+          <div class="cm-body">Ghidra is fine for beginners. The decompiler output is way easier than raw ASM. Just close most of the windows at first — it's overwhelming until it suddenly clicks.</div>
+        </div>
+        <div class="cm">
+          <div class="cm-head"><span class="cm-name" style="color:#ff2d55">ANON_0x7E3A</span><span class="cm-time">just now</span></div>
+          <div class="cm-body">Best tip: compile simple C code yourself, then look at what Ghidra says about it. You'll understand assembly 10x faster that way.</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="anon-row">Posting as: <span id="myname" style="color:var(--g)">ANON_0x????</span></div>
+        <div class="input-row">
+          <input class="msg-input" id="cinp" placeholder="Ask anything about RE, C++, tools..." maxlength="500" autocomplete="off">
+          <button class="send-btn" id="csend">SEND →</button>
+        </div>
+      </div>
+    </div>
+    <div class="chat-sidebar">
+      <div class="scard">
+        <div class="scard-title">// Rules</div>
+        <div class="rule-row"><span class="rn">01.</span><span>No doxxing or personal info</span></div>
+        <div class="rule-row"><span class="rn">02.</span><span>No illegal content or malware</span></div>
+        <div class="rule-row"><span class="rn">03.</span><span>Keep it RE, C++, security</span></div>
+        <div class="rule-row"><span class="rn">04.</span><span>Help others — zero gatekeeping</span></div>
+        <div class="rule-row"><span class="rn">05.</span><span>Be respectful, we all start at zero</span></div>
+      </div>
+      <div class="scard">
+        <div class="scard-title">// Topics</div>
+        <div class="topics">
+          <span class="topic-chip">C++ Help</span><span class="topic-chip">Assembly</span>
+          <span class="topic-chip">Ghidra</span><span class="topic-chip">x64dbg</span>
+          <span class="topic-chip">CrackMes</span><span class="topic-chip">Resources</span>
+          <span class="topic-chip">Roadmap</span><span class="topic-chip">Tools</span>
+        </div>
+      </div>
+      <div class="note-box"><strong>⚠ Setup needed:</strong> Replace <strong style="color:var(--g)">YOUR_FIREBASE_CONFIG</strong> in the script with your free Firebase config to make chat real-time. See instructions below footer!</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DAILY LOG ══════════ -->
+<section class="section" id="log">
+  <div class="sec-head rv"><span class="sec-num">07 /</span><h2 class="sec-title">Daily <em>Log</em></h2><div class="sec-line"></div></div>
+  <p class="ap rv" style="max-width:600px">Every day I learn something I log it here. Raw notes, progress updates, breakthroughs and failures — all public.</p>
+  <div id="log-feed" class="log-feed rv">
+    <div class="log-empty">// No log entries yet — check back soon</div>
+  </div>
+</section>
+
+<div class="full-div"></div>
+
+<!-- ══════════ ADMIN PANEL ══════════ -->
+<div id="admin-overlay">
+  <div class="admin-box">
+    <div id="admin-login-view">
+      <div class="admin-title">// ADMIN ACCESS</div>
+      <div class="admin-sub">Enter password to modify your site</div>
+      <div class="admin-field">
+        <label class="admin-label">Password</label>
+        <input class="admin-input" id="admin-pass" type="password" placeholder="Enter admin password...">
+      </div>
+      <button class="admin-btn" onclick="adminLogin()">UNLOCK →</button>
+      <button class="admin-btn ghost" onclick="closeAdmin()">CANCEL</button>
+      <div class="admin-msg" id="admin-err" style="background:rgba(255,45,85,.06);border-color:rgba(255,45,85,.3);color:#ff2d55">Wrong password!</div>
+    </div>
+
+    <div id="admin-main-view" style="display:none">
+      <div class="admin-title">// KRDN1337 ADMIN</div>
+      <div class="admin-sub">Update your progress and add daily logs</div>
+
+      <!-- SKILL BARS -->
+      <div class="admin-section">
+        <div class="admin-section-title">Update Skill Progress</div>
+        <div class="admin-field">
+          <label class="admin-label">C++ & Systems Programming</label>
+          <div class="admin-range">
+            <input type="range" min="0" max="100" id="sk1" oninput="document.getElementById('sk1v').textContent=this.value+'%'">
+            <span class="admin-range-val" id="sk1v">0%</span>
+          </div>
+        </div>
+        <div class="admin-field">
+          <label class="admin-label">x86/x64 Assembly Reading</label>
+          <div class="admin-range">
+            <input type="range" min="0" max="100" id="sk2" oninput="document.getElementById('sk2v').textContent=this.value+'%'">
+            <span class="admin-range-val" id="sk2v">0%</span>
+          </div>
+        </div>
+        <div class="admin-field">
+          <label class="admin-label">Static Analysis (Ghidra/IDA)</label>
+          <div class="admin-range">
+            <input type="range" min="0" max="100" id="sk3" oninput="document.getElementById('sk3v').textContent=this.value+'%'">
+            <span class="admin-range-val" id="sk3v">0%</span>
+          </div>
+        </div>
+        <div class="admin-field">
+          <label class="admin-label">Dynamic Analysis (x64dbg)</label>
+          <div class="admin-range">
+            <input type="range" min="0" max="100" id="sk4" oninput="document.getElementById('sk4v').textContent=this.value+'%'">
+            <span class="admin-range-val" id="sk4v">0%</span>
+          </div>
+        </div>
+        <button class="admin-btn" onclick="saveSkills()">SAVE SKILLS →</button>
+        <div class="admin-msg" id="skill-msg">Skills updated!</div>
+      </div>
+
+      <!-- DAILY LOG -->
+      <div class="admin-section">
+        <div class="admin-section-title">Add Daily Log Entry</div>
+        <div class="admin-field">
+          <label class="admin-label">What did you learn today?</label>
+          <textarea class="admin-textarea" id="log-text" placeholder="e.g. Learned about pointers in C++. Finally understand how memory addresses work. Tried my first crackme..."></textarea>
+        </div>
+        <div class="admin-field">
+          <label class="admin-label">Tags (comma separated)</label>
+          <input class="admin-input" id="log-tags" placeholder="C++, Pointers, x64dbg...">
+        </div>
+        <button class="admin-btn" onclick="addLogEntry()">ADD LOG ENTRY →</button>
+        <div class="admin-msg" id="log-msg">Log entry added!</div>
+      </div>
+
+      <!-- BLOG ENTRIES -->
+      <div class="admin-section">
+        <div class="admin-section-title">Add Blog Post</div>
+        <div class="admin-field">
+          <label class="admin-label">Post Title</label>
+          <input class="admin-input" id="blog-title" placeholder="e.g. How I Finally Understood Pointers...">
+        </div>
+        <button class="admin-btn" onclick="addBlogPost()">ADD BLOG POST →</button>
+        <div class="admin-msg" id="blog-msg">Blog post added!</div>
+      </div>
+
+      <!-- CHANGE PASSWORD -->
+      <div class="admin-section">
+        <div class="admin-section-title">Change Password</div>
+        <div class="admin-field">
+          <input class="admin-input" id="new-pass" type="password" placeholder="New password...">
+        </div>
+        <button class="admin-btn ghost" onclick="changePass()">CHANGE PASSWORD</button>
+        <div class="admin-msg" id="pass-msg">Password changed!</div>
+      </div>
+
+      <button class="admin-btn ghost" onclick="closeAdmin()">CLOSE PANEL</button>
+
+      <div class="admin-hint">
+        🔒 This panel is only visible to you<br>
+        💾 All data saved in browser (localStorage)<br>
+        🌐 To keep data when switching devices → back up manually<br>
+        ⌨️ Shortcut to open: press <strong style="color:var(--g)">` (backtick)</strong> key
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin trigger button (bottom right) -->
+<div id="admin-lock" onclick="openAdmin()" title="Admin Panel">⚙</div>
+
+<div class="full-div" style="margin:0 4rem"></div>
+<footer>
+  <div class="f-brand">
+    <div class="f-logo">KRDN1337</div>
+    <div class="f-tagline">Learning Reverse Engineering & C++ in public · Est. 2026</div>
+  </div>
+  <div class="f-right-col">
+    <div class="f-links">
+      <a href="#">GitHub</a><a href="#">Twitter / X</a><a href="#">YouTube</a>
+    </div>
+  </div>
+  <div class="f-bottom">
+    <span>Built from scratch · No frameworks · Pure HTML/CSS/JS</span>
+    <span>krdn1337<span>.pages.dev</span></span>
+  </div>
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+/* ══════════════════════════════════
+   KRDN1337 — CINEMATIC ENGINE
+══════════════════════════════════ */
+
+// ── MAGNETIC CURSOR ──
+const cur = document.getElementById('cur');
+const curRing = document.getElementById('cur-ring');
+const trailCanvas = document.getElementById('cur-trail');
+const tCtx = trailCanvas.getContext('2d');
+trailCanvas.width = window.innerWidth;
+trailCanvas.height = window.innerHeight;
+
+let mx=0,my=0,rx=0,ry=0;
+const trail = [];
+
+document.addEventListener('mousemove',e=>{
+  mx=e.clientX; my=e.clientY;
+  cur.style.left=mx+'px'; cur.style.top=my+'px';
+  trail.push({x:mx,y:my,o:1,r:4});
+  if(trail.length>20) trail.shift();
+});
+
+(function animCursor(){
+  rx+=(mx-rx)*.13; ry+=(my-ry)*.13;
+  curRing.style.left=rx+'px'; curRing.style.top=ry+'px';
+
+  tCtx.clearRect(0,0,trailCanvas.width,trailCanvas.height);
+  trail.forEach((p,i)=>{
+    p.o -= .05; p.r *= .95;
+    if(p.o<=0) return;
+    tCtx.beginPath();
+    tCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    tCtx.fillStyle=`rgba(0,255,136,${p.o*.4})`;
+    tCtx.fill();
+  });
+
+  requestAnimationFrame(animCursor);
+})();
+
+// hover effect
+document.querySelectorAll('a,button,.tc,.tool-item,.pj,.bi,.topic-chip,.tc-arr').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{
+    cur.style.width='18px'; cur.style.height='18px';
+    curRing.style.width='55px'; curRing.style.height='55px';
+    curRing.style.borderColor='rgba(0,255,136,.8)';
+  });
+  el.addEventListener('mouseleave',()=>{
+    cur.style.width='10px'; cur.style.height='10px';
+    curRing.style.width='36px'; curRing.style.height='36px';
+    curRing.style.borderColor='rgba(0,255,136,.5)';
+  });
+});
+
+// ── PLASMA BACKGROUND ──
+const plasma = document.getElementById('bg-plasma');
+const pCtx = plasma.getContext('2d');
+plasma.width = window.innerWidth; plasma.height = window.innerHeight;
+let pTime = 0;
+
+function drawPlasma(){
+  pTime += .005;
+  const W=plasma.width, H=plasma.height;
+  const img = pCtx.createImageData(W>>1, H>>1);
+  const d = img.data;
+  for(let y=0;y<H>>1;y++){
+    for(let x=0;x<W>>1;x++){
+      const v =
+        Math.sin((x*.02)+pTime) +
+        Math.sin((y*.03)+pTime*1.3) +
+        Math.sin(((x+y)*.015)+pTime*.7) +
+        Math.sin(Math.sqrt(x*x+y*y)*.02+pTime);
+      const n = (v+4)/8;
+      const i=(y*(W>>1)+x)*4;
+      d[i]   = n*20;
+      d[i+1] = n*255;
+      d[i+2] = n*140;
+      d[i+3] = 255;
+    }
+  }
+  pCtx.putImageData(img,0,0);
+  pCtx.drawImage(plasma,0,0,W>>1,H>>1,0,0,W,H);
+  requestAnimationFrame(drawPlasma);
+}
+drawPlasma();
+
+// ── GRID BACKGROUND ──
+const gridC = document.getElementById('bg-grid');
+const gCtx = gridC.getContext('2d');
+gridC.width = window.innerWidth; gridC.height = window.innerHeight;
+
+function drawGrid(){
+  gCtx.clearRect(0,0,gridC.width,gridC.height);
+  const sz=60;
+  // perspective grid
+  const vp={x:gridC.width/2,y:gridC.height*.3};
+  for(let i=0;i<30;i++){
+    const t=i/30;
+    // horizontal lines
+    const y=gridC.height*(t*.7+.1);
+    const spread=(y-vp.y)*2;
+    gCtx.beginPath();
+    gCtx.moveTo(vp.x-spread*.8,y);
+    gCtx.lineTo(vp.x+spread*.8,y);
+    gCtx.strokeStyle=`rgba(0,255,136,${.015+t*.025})`;
+    gCtx.lineWidth=.5;
+    gCtx.stroke();
+  }
+  for(let i=-20;i<=20;i++){
+    gCtx.beginPath();
+    gCtx.moveTo(vp.x+i*40,vp.y);
+    gCtx.lineTo(vp.x+i*200,gridC.height);
+    gCtx.strokeStyle=`rgba(0,255,136,${.01+Math.abs(i)*.001})`;
+    gCtx.lineWidth=.4;
+    gCtx.stroke();
+  }
+}
+drawGrid();
+
+// ── FLOATING PARTICLES ──
+const partC = document.getElementById('particle-canvas');
+const partCtx = partC.getContext('2d');
+partC.width = window.innerWidth; partC.height = window.innerHeight;
+
+const PARTICLES = Array.from({length:100},()=>({
+  x:Math.random()*window.innerWidth,
+  y:Math.random()*window.innerHeight,
+  vx:(Math.random()-.5)*.35,
+  vy:(Math.random()-.5)*.35,
+  size:Math.random()*1.5+.3,
+  o:Math.random()*.25+.05,
+  color:['rgba(0,255,136,','rgba(0,240,255,','rgba(168,85,247,'][Math.floor(Math.random()*3)]
+}));
+
+function drawParticles(){
+  partCtx.clearRect(0,0,partC.width,partC.height);
+  PARTICLES.forEach((p,i)=>{
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0||p.x>partC.width) p.vx*=-1;
+    if(p.y<0||p.y>partC.height) p.vy*=-1;
+
+    partCtx.beginPath();
+    partCtx.arc(p.x,p.y,p.size,0,Math.PI*2);
+    partCtx.fillStyle=p.color+p.o+')';
+    partCtx.fill();
+
+    // connections
+    PARTICLES.slice(i+1,i+8).forEach(p2=>{
+      const d=Math.hypot(p.x-p2.x,p.y-p2.y);
+      if(d<120){
+        partCtx.beginPath();
+        partCtx.moveTo(p.x,p.y); partCtx.lineTo(p2.x,p2.y);
+        partCtx.strokeStyle=`rgba(0,255,136,${.04*(1-d/120)})`;
+        partCtx.lineWidth=.4; partCtx.stroke();
+      }
+    });
+  });
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+// ── HERO CANVAS (binary rain + aurora) ──
+const heroC = document.getElementById('hero-canvas');
+const hCtx = heroC.getContext('2d');
+function resizeHero(){
+  heroC.width=heroC.offsetWidth;
+  heroC.height=heroC.offsetHeight;
+}
+resizeHero();
+
+const BIN_COLS = Math.floor(heroC.width/18);
+const binDrops = Array(BIN_COLS).fill(1);
+const binChars = '01アイウエオABCDEF0101'.split('');
+
+function drawHero(){
+  hCtx.fillStyle='rgba(2,6,8,.055)';
+  hCtx.fillRect(0,0,heroC.width,heroC.height);
+  hCtx.font='13px JetBrains Mono';
+  binDrops.forEach((y,i)=>{
+    const ch=binChars[Math.floor(Math.random()*binChars.length)];
+    const grd=hCtx.createLinearGradient(0,0,0,heroC.height);
+    grd.addColorStop(0,'rgba(0,255,136,.8)');
+    grd.addColorStop(1,'rgba(0,255,136,.05)');
+    hCtx.fillStyle=y*13<heroC.height*.3?'rgba(180,255,210,.9)':`rgba(0,${150+Math.random()*100},${80+Math.random()*60},${.3+Math.random()*.4})`;
+    hCtx.fillText(ch,i*18,y*13);
+    if(y*13>heroC.height&&Math.random()>.97) binDrops[i]=0;
+    binDrops[i]++;
+  });
+  requestAnimationFrame(drawHero);
+}
+drawHero();
+
+// ── BANNER CANVAS ──
+const bannerC = document.getElementById('banner-canvas');
+if(bannerC){
+  const bCtx=bannerC.getContext('2d');
+  bannerC.width=bannerC.offsetWidth||360;
+  bannerC.height=100;
+  const bannerParts=Array.from({length:30},()=>({
+    x:Math.random()*bannerC.width,y:Math.random()*100,
+    vx:(Math.random()-.5)*.6,vy:(Math.random()-.5)*.6,
+    s:Math.random()*1.2+.3
+  }));
+  function drawBanner(){
+    bCtx.fillStyle='rgba(2,6,8,.3)';
+    bCtx.fillRect(0,0,bannerC.width,100);
+    bannerParts.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>bannerC.width)p.vx*=-1;
+      if(p.y<0||p.y>100)p.vy*=-1;
+      bCtx.beginPath();bCtx.arc(p.x,p.y,p.s,0,Math.PI*2);
+      bCtx.fillStyle='rgba(0,255,136,.4)';bCtx.fill();
+    });
+    requestAnimationFrame(drawBanner);
+  }
+  drawBanner();
+}
+
+// ── HERO LOAD SEQUENCE ──
+window.addEventListener('load',()=>{
+  setTimeout(()=>document.getElementById('hero-content').classList.add('loaded'),300);
+});
+
+// ── NAV SCROLL ──
+window.addEventListener('scroll',()=>{
+  document.getElementById('nav').classList.toggle('solid',window.scrollY>40);
+},{ passive:true });
+
+// ── SCROLL REVEAL ──
+const rvObs=new IntersectionObserver(entries=>{
+  entries.forEach((e,i)=>{
+    if(e.isIntersecting) setTimeout(()=>e.target.classList.add('on'),i*80);
+  });
+},{threshold:.07});
+document.querySelectorAll('.rv,.rv-l,.rv-r,.rv-s').forEach(el=>rvObs.observe(el));
+
+// ── SKILL BARS ──
+const skObs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting)
+      e.target.querySelectorAll('.sk-fill').forEach(b=>{
+        b.style.width=getComputedStyle(b).getPropertyValue('--w')||'0%';
+      });
+  });
+},{threshold:.2});
+document.querySelectorAll('.sk-track').forEach(t=>{
+  if(t.querySelector('.sk-fill')) skObs.observe(t.closest('.rv-l,.rv,.section')||t);
+});
+// direct bar observer
+document.querySelectorAll('.sk-fill').forEach(b=>{
+  const obs=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        e.target.style.width=getComputedStyle(e.target).getPropertyValue('--w')||'0%';
+        obs.unobserve(e.target);
+      }
+    });
+  },{threshold:.1});
+  obs.observe(b);
+});
+
+// ── COUNTER ──
+function animCount(el,target,dur=1500){
+  const start=performance.now();
+  (function step(now){
+    const p=Math.min((now-start)/dur,1);
+    const ease=1-Math.pow(1-p,4);
+    el.textContent=Math.floor(ease*target);
+    if(p<1)requestAnimationFrame(step);
+    else el.textContent=target;
+  })(start);
+}
+const cObs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.querySelectorAll('[data-target]').forEach(el=>animCount(el,+el.dataset.target));
+      cObs.unobserve(e.target);
+    }
+  });
+},{threshold:.3});
+document.querySelectorAll('.pc-stats').forEach(el=>cObs.observe(el));
+
+// ── MOUSE-TRACKED CARD GLOW ──
+document.querySelectorAll('.tc').forEach(card=>{
+  card.addEventListener('mousemove',e=>{
+    const r=card.getBoundingClientRect();
+    const x=((e.clientX-r.left)/r.width*100).toFixed(1);
+    const y=((e.clientY-r.top)/r.height*100).toFixed(1);
+    card.style.setProperty('--mx',x+'%');
+    card.style.setProperty('--my',y+'%');
+  });
+});
+
+// ── DECO DOTS ──
+const deco=document.getElementById('hero-deco');
+if(deco){
+  const rings=[380,280,180,80];
+  rings.forEach((r,ri)=>{
+    const dotCount=[6,5,4,3][ri];
+    for(let i=0;i<dotCount;i++){
+      const dot=document.createElement('div');
+      dot.className='deco-dot';
+      const angle=(i/dotCount)*Math.PI*2;
+      dot.style.cssText=`
+        width:${6-ri}px;height:${6-ri}px;
+        transform:translate(${Math.cos(angle)*r/2}px,${Math.sin(angle)*r/2}px);
+        background:${['var(--g)','var(--c)','var(--p)','var(--y)'][ri]};
+        box-shadow:0 0 ${8-ri*1.5}px ${['var(--g)','var(--c)','var(--p)','var(--y)'][ri]}
+      `;
+      deco.appendChild(dot);
+    }
+  });
+}
+
+// ── FIREBASE REAL-TIME CHAT ──
+// 🔥 STEP 1: Go to firebase.google.com → create free project
+// 🔥 STEP 2: Add web app → copy your config below
+// 🔥 STEP 3: Enable Realtime Database → set rules to public read/write (for anonymous chat)
+
+const FIREBASE_CONFIG = {
+  // PASTE YOUR FIREBASE CONFIG HERE 👇
+  // apiKey: "YOUR_API_KEY",
+  // authDomain: "YOUR_PROJECT.firebaseapp.com",
+  // databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  // projectId: "YOUR_PROJECT_ID",
+};
+
+const USE_FIREBASE = Object.keys(FIREBASE_CONFIG).length > 1;
+
+const COLORS=['#00ff88','#00f0ff','#fbbf00','#ff2d55','#cc88ff','#ff8844','#44ffcc'];
+const hex=()=>(Math.random()*0xFFFF|0).toString(16).toUpperCase().padStart(4,'0');
+const myName='ANON_0x'+hex();
+const myColor=COLORS[Math.floor(Math.random()*COLORS.length)];
+document.getElementById('myname').textContent=myName;
+document.getElementById('myname').style.color=myColor;
+
+const msgsEl=document.getElementById('msgs');
+const cinp=document.getElementById('cinp');
+const csend=document.getElementById('csend');
+function timeStr(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+
+function addMsg(name,color,text,own=false,tag='',ts=''){
+  const d=document.createElement('div');
+  d.className='cm'+(own?' own':'');
+  d.innerHTML=`
+    <div class="cm-head">
+      <span class="cm-name" style="color:${color}">${name}</span>
+      <span class="cm-time">${ts||timeStr()}</span>
+      ${tag?`<span class="cm-tag">${tag}</span>`:''}
+    </div>
+    <div class="cm-body">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+  msgsEl.appendChild(d);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+
+function addSys(t){
+  const d=document.createElement('div');
+  d.className='cm-sys';d.textContent=`— ${t} —`;
+  msgsEl.appendChild(d);msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+
+if(USE_FIREBASE){
+  // Load Firebase dynamically
+  const s1=document.createElement('script');
+  s1.src='https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+  document.head.appendChild(s1);
+  s1.onload=()=>{
+    const s2=document.createElement('script');
+    s2.src='https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+    document.head.appendChild(s2);
+    s2.onload=()=>{
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const db=firebase.database();
+      const chatRef=db.ref('krdn1337/chat');
+      // Load last 50 messages
+      chatRef.limitToLast(50).on('child_added',snap=>{
+        const m=snap.val();
+        const isOwn=m.name===myName;
+        addMsg(m.name,m.color,m.text,isOwn,'',m.time);
+      });
+      // Update online count roughly
+      const presRef=db.ref('krdn1337/presence/'+myName);
+      presRef.set(true);
+      presRef.onDisconnect().remove();
+      db.ref('krdn1337/presence').on('value',snap=>{
+        const c=snap.numChildren()||1;
+        document.getElementById('oc').textContent=c;
+      });
+      // Send message to Firebase
+      window._fbSend=(text)=>{
+        chatRef.push({name:myName,color:myColor,text,time:timeStr()});
+      };
+    };
+  };
+} else {
+  // Local fallback — works only in current browser session
+  addSys('Local mode — configure Firebase for real-time chat');
+  window._fbSend=null;
+}
+
+function send(){
+  const t=cinp.value.trim();if(!t)return;
+  if(USE_FIREBASE && window._fbSend){
+    window._fbSend(t);
+  } else {
+    addMsg(myName,myColor,t,true);
+  }
+  cinp.value='';
+  document.getElementById('oc').textContent=1+Math.floor(Math.random()*12);
+}
+csend.addEventListener('click',send);
+cinp.addEventListener('keydown',e=>{if(e.key==='Enter')send()});
+if(!USE_FIREBASE) setTimeout(()=>addSys('ANON_0x'+hex()+' joined the session'),2800);
+
+// ══════════════════════════════════
+// ADMIN PANEL
+// ══════════════════════════════════
+
+const ADMIN_PASS_KEY='krdn_admin_pass';
+const SKILLS_KEY='krdn_skills';
+const LOGS_KEY='krdn_logs';
+const BLOG_KEY='krdn_blog';
+const DEFAULT_PASS='krdn1337';
+
+function getPass(){return localStorage.getItem(ADMIN_PASS_KEY)||DEFAULT_PASS}
+
+function openAdmin(){document.getElementById('admin-overlay').classList.add('open');document.getElementById('admin-pass').focus()}
+function closeAdmin(){document.getElementById('admin-overlay').classList.remove('open')}
+
+function adminLogin(){
+  const p=document.getElementById('admin-pass').value;
+  if(p===getPass()){
+    document.getElementById('admin-login-view').style.display='none';
+    document.getElementById('admin-main-view').style.display='block';
+    loadAdminSkills();
+  } else {
+    document.getElementById('admin-err').style.display='block';
+    setTimeout(()=>document.getElementById('admin-err').style.display='none',2000);
+  }
+}
+
+// ── SKILLS ──
+const DEFAULT_SKILLS={s1:35,s2:22,s3:28,s4:18};
+
+function loadSkills(){
+  const saved=JSON.parse(localStorage.getItem(SKILLS_KEY)||'null')||DEFAULT_SKILLS;
+  const bars=document.querySelectorAll('.sk-fill');
+  const pcts=document.querySelectorAll('.sk-pct');
+  const vals=[saved.s1,saved.s2,saved.s3,saved.s4];
+  bars.forEach((b,i)=>{if(vals[i]!==undefined){b.style.setProperty('--w',vals[i]+'%');}});
+  pcts.forEach((p,i)=>{if(vals[i]!==undefined)p.textContent=vals[i]+'%'});
+}
+
+function loadAdminSkills(){
+  const saved=JSON.parse(localStorage.getItem(SKILLS_KEY)||'null')||DEFAULT_SKILLS;
+  ['s1','s2','s3','s4'].forEach(k=>{
+    const el=document.getElementById(k);
+    if(el){el.value=saved[k];document.getElementById(k+'v').textContent=saved[k]+'%';}
+  });
+}
+
+function saveSkills(){
+  const data={
+    s1:+document.getElementById('sk1').value,
+    s2:+document.getElementById('sk2').value,
+    s3:+document.getElementById('sk3').value,
+    s4:+document.getElementById('sk4').value,
+  };
+  localStorage.setItem(SKILLS_KEY,JSON.stringify(data));
+  loadSkills();
+  const m=document.getElementById('skill-msg');
+  m.style.display='block';setTimeout(()=>m.style.display='none',2000);
+}
+
+// ── LOGS ──
+function getLogs(){return JSON.parse(localStorage.getItem(LOGS_KEY)||'[]')}
+
+function renderLogs(){
+  const feed=document.getElementById('log-feed');
+  const logs=getLogs();
+  if(!logs.length){feed.innerHTML='<div class="log-empty">// No log entries yet — check back soon</div>';return;}
+  feed.innerHTML=logs.slice().reverse().map(l=>`
+    <div class="log-entry rv on">
+      <div class="log-entry-date">${l.date} · Day ${l.day}</div>
+      <div class="log-entry-text">${l.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      ${l.tags.length?`<div class="log-entry-tags">${l.tags.map(t=>`<span class="log-tag">${t}</span>`).join('')}</div>`:''}
+    </div>`).join('');
+}
+
+function addLogEntry(){
+  const text=document.getElementById('log-text').value.trim();
+  if(!text)return;
+  const tags=document.getElementById('log-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const logs=getLogs();
+  const now=new Date();
+  logs.push({
+    date:now.toISOString().slice(0,10).replace(/-/g,' · '),
+    day:logs.length+1,
+    text,tags
+  });
+  localStorage.setItem(LOGS_KEY,JSON.stringify(logs));
+  document.getElementById('log-text').value='';
+  document.getElementById('log-tags').value='';
+  renderLogs();
+  const m=document.getElementById('log-msg');
+  m.style.display='block';setTimeout(()=>m.style.display='none',2000);
+}
+
+// ── BLOG ──
+function getBlog(){return JSON.parse(localStorage.getItem(BLOG_KEY)||'[]')}
+
+function renderBlog(){
+  const list=document.querySelector('.blog-list');
+  if(!list)return;
+  const saved=getBlog();
+  if(!saved.length)return;
+  const now=new Date();
+  const existing=list.querySelectorAll('.bi.dynamic');
+  existing.forEach(e=>e.remove());
+  saved.slice().reverse().forEach(b=>{
+    const div=document.createElement('div');
+    div.className='bi rv on dynamic';
+    div.innerHTML=`<span class="bi-date">${b.date}</span><span class="bi-title">${b.title.replace(/</g,'&lt;')}</span><span class="bi-tag">New</span>`;
+    list.insertBefore(div,list.firstChild);
+  });
+}
+
+function addBlogPost(){
+  const title=document.getElementById('blog-title').value.trim();
+  if(!title)return;
+  const blog=getBlog();
+  const now=new Date();
+  const d=now.toISOString().slice(0,10);
+  blog.push({title,date:d.replace(/(\d{4})-(\d{2})-(\d{2})/,'$1 · $2 · $3')});
+  localStorage.setItem(BLOG_KEY,JSON.stringify(blog));
+  document.getElementById('blog-title').value='';
+  renderBlog();
+  const m=document.getElementById('blog-msg');
+  m.style.display='block';setTimeout(()=>m.style.display='none',2000);
+}
+
+// ── CHANGE PASSWORD ──
+function changePass(){
+  const np=document.getElementById('new-pass').value.trim();
+  if(!np)return;
+  localStorage.setItem(ADMIN_PASS_KEY,np);
+  document.getElementById('new-pass').value='';
+  const m=document.getElementById('pass-msg');
+  m.style.display='block';setTimeout(()=>m.style.display='none',2000);
+}
+
+// ── KEYBOARD SHORTCUT ──
+document.addEventListener('keydown',e=>{
+  if(e.key==='`'){openAdmin();}
+  if(e.key==='Escape'){closeAdmin();}
+});
+
+// ── ADMIN PASS INPUT ENTER ──
+document.getElementById('admin-pass').addEventListener('keydown',e=>{
+  if(e.key==='Enter')adminLogin();
+});
+
+// ── INIT ──
+loadSkills();
+renderLogs();
+renderBlog();
+
+// ── RESIZE ──
+window.addEventListener('resize',()=>{
+  trailCanvas.width=window.innerWidth; trailCanvas.height=window.innerHeight;
+  plasma.width=window.innerWidth; plasma.height=window.innerHeight;
+  partC.width=window.innerWidth; partC.height=window.innerHeight;
+  gridC.width=window.innerWidth; gridC.height=window.innerHeight;
+  drawGrid();
+  resizeHero();
+});
+
+// ── NAV ACTIVE ──
+const secEls=document.querySelectorAll('[id]');
+const navAs=document.querySelectorAll('nav ul li a');
+window.addEventListener('scroll',()=>{
+  let current='';
+  secEls.forEach(s=>{if(window.scrollY>=s.offsetTop-120)current=s.id});
+  navAs.forEach(a=>{
+    const active=a.getAttribute('href')==='#'+current;
+    a.style.color=active?'var(--g)':'';
+  });
+},{passive:true});
+</script>
+</body>
+</html>
